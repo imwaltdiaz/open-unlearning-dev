@@ -19,7 +19,14 @@ def main(cfg: DictConfig):
     template_args = model_cfg.template_args
     assert model_cfg is not None, "Invalid model yaml passed in train config."
     model, tokenizer = get_model(model_cfg)
+    
+    # [NUEVO] Forzar que el adaptador sea entrenable para ciclos secuenciales
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
+    if hasattr(model, "train"):
+        model.train()
 
+        
     # Load Dataset
     data_cfg = cfg.data
     data = get_data(

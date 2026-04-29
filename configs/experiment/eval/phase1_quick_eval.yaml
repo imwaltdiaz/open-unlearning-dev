@@ -2,15 +2,24 @@
 # Configuración Fase 1 - Quick Evaluation con Hydra
 
 defaults:
-  - override /model: TinyLlama-1.1B-Chat-v1.0
+  - override /model: Llama-3.2-1B-Instruct
+  - override /eval: lm_eval
   - override /paths: default
 
 # Parámetros específicos Fase 1 Evaluation
-domain: ??? # Requerido: historia, matematica o literatura
-adapter_path: ??? # Requerido: ruta al adapter LoRA
-max_new_tokens: 128
-n_examples: 3
-mode: eval
 seed: 42  # Determinismo garantizado
-
+mode: eval
 task_name: ??? # Requerido: nombre del experimento
+
+model:
+  adapter_path: ??? # Requerido: ruta al adapter LoRA
+
+eval:
+  lm_eval:
+    overwrite: true
+    tasks:
+      - arc_easy
+      - piqa
+    simple_evaluate_args:
+      batch_size: 8
+      apply_chat_template: false

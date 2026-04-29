@@ -1,0 +1,14 @@
+defaults:
+  - GradDiff
+
+handler: ULD
+
+args: # HuggingFace TrainingArguments
+  learning_rate: 1e-5
+  num_train_epochs: 5
+
+method_args:
+  alpha: 1.0
+  gamma: 1.0
+  retain_loss_type: NLL
+  uld_lambda: 1.0

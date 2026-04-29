@@ -1,0 +1,34 @@
+# @package _global_
+# Configuración Fase 3 - Continuous Evaluation con Hydra
+
+defaults:
+  - override /model: Llama-3.2-1B-Instruct
+  - override /eval: tofu
+  - override /paths: default
+
+seed: 42
+mode: eval
+task_name: ??? # Requerido: nombre del experimento (ej: eval_batch_1)
+
+model:
+  adapter_path: ??? # Requerido: ruta al adapter LoRA actual
+
+dataset:
+  forget_split: ??? # Se sobrescribirá por CLI (ej: forget_batch_1)
+  retain_split: null
+
+eval:
+  tofu:
+    # Sobrescribimos el defaults de las métricas de tofu para incluir las de la Fase 3
+    defaults:
+      - override /eval/tofu_metrics@metrics.forget_Q_A_ROUGE: forget_Q_A_ROUGE
+      - override /eval/tofu_metrics@metrics.forget_Truth_Ratio: forget_Truth_Ratio
+      - override /eval/tofu_metrics@metrics.extraction_strength: extraction_strength
+      - override /eval/tofu_metrics@metrics.forget_Q_A_gibberish: forget_Q_A_gibberish
+
+    handler: TOFUEvaluator
+    overwrite: true
+    batch_size: 16
+    forget_split: ${dataset.forget_split}
+    holdout_split: null
+    question_key: "question"

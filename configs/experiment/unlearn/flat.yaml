@@ -1,0 +1,9 @@
+# configs/experiment/unlearn/flat.yaml
+defaults:
+  - sequential
+  - _self_
+
+trainer: FLAT # Llama a tu stub
+
+data:
+  retain: null # <--- Esto evita cargar los datos en RAM

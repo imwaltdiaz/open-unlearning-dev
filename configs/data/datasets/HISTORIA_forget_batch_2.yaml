@@ -1,0 +1,10 @@
+HISTORIA_forget_batch_2:
+  handler: QADataset
+  args:
+    hf_args:
+      path: "json"
+      data_files: "data/historia/sequential_splits/forget_batch_2.jsonl"
+      split: "train"
+    question_key: "question"
+    answer_key: "answer"
+    max_length: 512

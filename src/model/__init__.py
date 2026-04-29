@@ -62,6 +62,19 @@ def get_model(model_cfg: DictConfig):
             f"Error {e} while fetching model using {model_handler}.from_pretrained()."
         )
     tokenizer = get_tokenizer(tokenizer_args)
+    adapter_path = model_cfg.get("adapter_path", None)
+    if adapter_path is None:
+        peft_cfg = model_cfg.get("peft", None)
+        if peft_cfg:
+            adapter_path = peft_cfg.get("adapter_path", None)
+    if adapter_path:
+        try:
+            from peft import PeftModel
+        except ImportError as exc:
+            raise ImportError(
+                "peft is required to load adapters. Install peft or remove adapter_path."
+            ) from exc
+        model = PeftModel.from_pretrained(model, adapter_path)
     return model, tokenizer
 
 
