@@ -22,6 +22,10 @@ from evals.metrics.utility import (
     hm_aggregate,
     classifier_prob,
 )
+from evals.metrics.f1_metrics import (
+    f1_score_metric,
+    f1_less_than_01_metric,
+)
 
 METRICS_REGISTRY: Dict[str, UnlearningMetric] = {}
 
@@ -73,3 +77,7 @@ _register_metric(mia_reference)
 
 # Register Utility metrics
 _register_metric(classifier_prob)
+
+# Register F1 metrics (Fase 1)
+_register_metric(f1_score_metric)
+_register_metric(f1_less_than_01_metric)

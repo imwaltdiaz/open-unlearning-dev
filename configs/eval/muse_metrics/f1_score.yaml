@@ -1,0 +1,8 @@
+# @package eval.muse.metrics.f1_score
+# F1 Score metric for MUSE benchmark
+
+defaults:
+  - ../../data/datasets@datasets: MUSE_forget
+
+handler: f1_score
+batch_size: 16

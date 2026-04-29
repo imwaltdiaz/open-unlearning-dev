@@ -1,0 +1,8 @@
+# @package eval.tofu.metrics.f1_score
+# F1 Score metric for TOFU benchmark
+
+defaults:
+  - ../../data/datasets@datasets: TOFU_forget
+
+handler: f1_score
+batch_size: 16

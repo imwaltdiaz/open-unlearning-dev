@@ -1,0 +1,10 @@
+# @package eval.tofu.metrics.f1_less_than_01
+# Proportion of examples with F1 < 0.1 (Unlearning metric)
+
+defaults:
+  - .@pre_compute.f1_score: f1_score
+
+handler: f1_less_than_01
+pre_compute:
+  f1_score:
+    access_key: f1_score

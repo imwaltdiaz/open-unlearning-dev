@@ -8,16 +8,21 @@ Ejemplos:
   python -u phase1_scripts/03_train_lora.py --domain matematica --epochs 0.5 --max_train 1000 --max_eval 200
 """
 
-import os, argparse
-from pathlib import Path
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import torch
+from pathlib import Path
+from omegaconf import DictConfig
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, AutoModelForCausalLM,
     DataCollatorForLanguageModeling, Trainer, TrainingArguments
 )
 from peft import LoraConfig, get_peft_model
+import hydra
+from src.trainer.utils import seed_everything
 
 
 def jprint(msg): print(msg, flush=True)
@@ -26,21 +31,6 @@ def first_existing(paths):
     for p in paths:
         if p and Path(p).exists(): return p
     return None
-
-
-def build_args():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--domain", required=True, choices=["matematica", "historia", "literatura"])
-    ap.add_argument("--model", type=str, default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-    ap.add_argument("--max_length", type=int, default=1024)
-    ap.add_argument("--batch_size", type=int, default=2)
-    ap.add_argument("--epochs", type=float, default=1.0)
-    ap.add_argument("--max_train", type=int, default=0, help="0 = usar todo")
-    ap.add_argument("--max_eval", type=int, default=0, help="0 = usar todo")
-    ap.add_argument("--output_dir", type=str, default=None)
-    ap.add_argument("--logging_steps", type=int, default=10)
-    ap.add_argument("--grad_accum", type=int, default=1)
-    return ap.parse_args()
 
 
 def load_jsonl_as_dataset(path):
@@ -91,12 +81,12 @@ def build_tokenizer(model_name, max_length):
     return tokenizer
 
 
-def make_tok_fn(tokenizer, args):
+def make_tok_fn(tokenizer, max_length):
     # ⚠️ No añadimos 'labels' aquí. El collator las crea (labels = input_ids) después del padding.
     def tok(batch):
         return tokenizer(
             batch["text"],
-            max_length=args.max_length,
+            max_length=max_length,
             truncation=True,
             padding=False,  # padding dinámico en el collator
         )
@@ -130,11 +120,23 @@ def load_lora_model(model_name):
     return model
 
 
-def main(args):
-    jprint("➡️ Iniciando 03_train_lora.py")
+@hydra.main(version_base=None, config_path="../configs", config_name="train.yaml")
+def main(cfg: DictConfig):
+    """Entrenamiento LoRA Fase 1 con Hydra config injection"""
+    seed_everything(cfg.trainer.args.seed)
+    jprint("➡️ Iniciando 03_train_lora.py (Hydra)")
 
-    train_ds, eval_ds = prepare_datasets(args.domain, args.max_train, args.max_eval)
-    tokenizer = build_tokenizer(args.model, args.max_length)
+    domain = cfg.get("domain", "historia")
+    max_train = cfg.get("max_train", 0)
+    max_eval = cfg.get("max_eval", 0)
+    max_length = cfg.get("max_length", 1024)
+    batch_size = cfg.get("batch_size", 2)
+    logging_steps = cfg.get("logging_steps", 10)
+    
+    train_ds, eval_ds = prepare_datasets(domain, max_train, max_eval)
+    
+    model_name = cfg.model.model_args.pretrained_model_name_or_path
+    tokenizer = build_tokenizer(model_name, max_length)
 
     # 1) crea campo "text"
     formatter = build_formatter()
@@ -142,35 +144,43 @@ def main(args):
     eval_ds  = eval_ds.map(formatter,  remove_columns=[])
 
     # 2) tokeniza y **elimina todas las columnas previas** (para evitar dicts como 'meta')
-    tok_fn = make_tok_fn(tokenizer, args)
+    tok_fn = make_tok_fn(tokenizer, max_length)
     train_ds = train_ds.map(tok_fn, batched=True, remove_columns=train_ds.column_names)
     eval_ds  = eval_ds.map(tok_fn,  batched=True, remove_columns=eval_ds.column_names)
 
     # Collator causal LM (crea labels = input_ids y hace padding dinámico)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-    model = load_lora_model(args.model)
-    output_dir = args.output_dir or f"runs/{args.domain}_smoke"
+    model = load_lora_model(model_name)
+    
+    # Schema: saves/${mode}/${task_name}
+    task_name = cfg.task_name
+    mode = cfg.get("mode", "train")
+    output_dir = os.path.join(cfg.paths.output_dir, mode, task_name)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     _, dtype_flags = pick_dtypes()
     training_args = TrainingArguments(
         output_dir=output_dir,
-        num_train_epochs=float(args.epochs),
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        logging_steps=args.logging_steps,
+        num_train_epochs=float(cfg.trainer.args.num_train_epochs),
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        logging_steps=logging_steps,
         eval_strategy="steps",
-        eval_steps=args.logging_steps,
-        save_steps=max(args.logging_steps, 50),
+        eval_steps=logging_steps,
+        save_steps=max(logging_steps, 50),
         save_total_limit=2,
-        gradient_accumulation_steps=args.grad_accum,
+        gradient_accumulation_steps=cfg.trainer.args.gradient_accumulation_steps,
         remove_unused_columns=True,
         report_to=[],
+        seed=cfg.trainer.args.seed,
         **dtype_flags,
     )
 
     jprint(f"➡️ output_dir = {training_args.output_dir}")
+    jprint(f"➡️ task_name = {task_name}")
+    jprint(f"➡️ domain = {domain}")
+    jprint(f"➡️ seed = {cfg.trainer.args.seed}")
     jprint(f"➡️ precision: bf16={dtype_flags['bf16']} fp16={dtype_flags['fp16']}")
 
     trainer = Trainer(
@@ -189,7 +199,5 @@ def main(args):
     tokenizer.save_pretrained(output_dir)
     jprint("✅ Entrenamiento terminado.")
 
-
 if __name__ == "__main__":
-    args = build_args()
-    main(args)
+    main()

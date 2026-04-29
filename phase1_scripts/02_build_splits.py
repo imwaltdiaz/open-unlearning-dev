@@ -1,5 +1,10 @@
 import os, json, random, re
-random.seed(42)
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from src.trainer.utils import seed_everything
+
+seed_everything(42)
 
 # -------------------- utilidades base --------------------
 
