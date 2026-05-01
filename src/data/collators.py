@@ -65,3 +65,76 @@ class DataCollatorForSupervisedDataset(object):
                 else:
                     raise Warning(f"{self.index} not found in dataset")
         return return_dct
+
+
+class DataCollatorForSupervisedDatasetwithIndex(object):
+    """Collate examples for supervised fine-tuning with index tracking."""
+
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,
+        padding_side: str = "right",
+        index: str = "index",
+    ):
+        self.base_collator = DataCollatorForSupervisedDataset(
+            tokenizer=tokenizer,
+            padding_side=padding_side,
+            index=index,
+        )
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        return self.base_collator(instances)
+
+
+class DataCollatorForUnlearning(object):
+    """Collate examples for unlearning methods (e.g., WGA, GradDiff, PDU).
+    
+    Preserves the nested structure {"forget": {...}, "retain": {...}} in the batch.
+    Each subset (forget/retain) is processed independently to handle sequences of different lengths.
+    """
+
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,
+        padding_side: str = "right",
+    ):
+        self.tokenizer = tokenizer
+        self.padding_side = padding_side
+        self.base_collator = DataCollatorForSupervisedDataset(
+            tokenizer=tokenizer,
+            padding_side=padding_side,
+            index=None,
+        )
+
+    def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
+        """
+        Collate a batch while preserving forget/retain structure.
+        
+        Args:
+            instances: List of dicts with structure {"forget": {...}, "retain": {...}}
+                      Each inner dict has "input_ids", "attention_mask", "labels"
+        
+        Returns:
+            Dict with structure {"forget": {...}, "retain": {...}} where each subset
+            has padded tensors for "input_ids", "attention_mask", "labels"
+        """
+        assert isinstance(instances[0], dict), "Expected list of dicts"
+        
+        # Check if this is a forget/retain structure
+        if "forget" in instances[0] and "retain" in instances[0]:
+            # Extract forget and retain subsets
+            forget_instances = [inst["forget"] for inst in instances]
+            retain_instances = [inst["retain"] for inst in instances]
+            
+            # Process each subset independently using the base collator
+            forget_batch = self.base_collator(forget_instances)
+            retain_batch = self.base_collator(retain_instances)
+            
+            # Return with structure preserved
+            return {
+                "forget": forget_batch,
+                "retain": retain_batch,
+            }
+        else:
+            # Fall back to standard processing if not unlearning structure
+            return self.base_collator(instances)

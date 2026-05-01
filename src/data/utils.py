@@ -110,9 +110,16 @@ def preprocess_chat_instance(
             truncation=True,
         )["input_ids"]
 
+    # Aseguramos que chat_ids y prompt_ids sean listas (no objetos BatchEncoding)
+    if not isinstance(chat_ids, list):
+        chat_ids = chat_ids["input_ids"] if "input_ids" in chat_ids else list(chat_ids)
+    if not isinstance(prompt_ids, list):
+        prompt_ids = prompt_ids["input_ids"] if "input_ids" in prompt_ids else list(prompt_ids)
+
+    # Ahora la suma de listas funcionará sin errores
     if chat_ids[-1] != tokenizer.eos_token_id:
         chat_ids += [tokenizer.eos_token_id]
-
+        
     len_matched = len(prompt_ids)
 
     item = {}

@@ -24,7 +24,12 @@ from trainer.utils import seed_everything
 def apply_lora(model, lora_cfg):
     if lora_cfg is None:
         return model
-    lora_cfg = dict(lora_cfg)
+    
+    # REPARACIÓN CRÍTICA: OmegaConf.to_container convierte TODO (incluyendo listas anidadas)
+    # a tipos nativos de Python (dict y list), evitando el error de serialización JSON.
+    if not isinstance(lora_cfg, dict):
+        lora_cfg = OmegaConf.to_container(lora_cfg, resolve=True)
+    
     lora = LoraConfig(
         r=lora_cfg.get("r", 8),
         lora_alpha=lora_cfg.get("lora_alpha", 16),
@@ -50,7 +55,6 @@ def write_run_config(output_dir, cfg):
     with open(run_cfg_path, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
 
-
 @hydra.main(version_base=None, config_path="../configs", config_name="historia_lora.yaml")
 def main(cfg: DictConfig):
     """Entrenamiento LoRA Fase 1 (pipeline OpenUnlearning)."""
@@ -59,6 +63,7 @@ def main(cfg: DictConfig):
 
     model_cfg = cfg.model
     template_args = model_cfg.template_args
+    
     model, tokenizer = get_model(model_cfg)
     model = apply_lora(model, cfg.get("lora", None))
 
@@ -68,9 +73,12 @@ def main(cfg: DictConfig):
     collator_cfg = cfg.collator
     collator = get_collators(collator_cfg, tokenizer=tokenizer)
 
-    trainer_cfg = cfg.trainer
+    # REVERSIÓN AQUÍ: Usamos cfg.trainer directamente (objeto Hydra) 
+    # para que load_trainer pueda acceder a .args sin errores.
+    trainer_cfg = cfg.trainer 
+    
     trainer, trainer_args = load_trainer(
-        trainer_cfg=trainer_cfg,
+        trainer_cfg=trainer_cfg, 
         model=model,
         train_dataset=data.get("train", None),
         eval_dataset=data.get("eval", None),
@@ -89,7 +97,6 @@ def main(cfg: DictConfig):
 
     if trainer_args.do_eval:
         trainer.evaluate(metric_key_prefix="eval")
-
 
 if __name__ == "__main__":
     main()

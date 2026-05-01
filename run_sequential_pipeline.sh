@@ -1,12 +1,9 @@
 #!/bin/bash
 set -e
 
-# Orquestador Bash para el HPC - Fase 2 y 3 (Desaprendizaje Secuencial y Evaluación Continua)
-
-METHOD=${1:-"ULD"}
-BASE_MODEL="meta-llama/Llama-3.2-1B-Instruct"
-# M_0 (Adaptador de la Fase 1)
-PREV_MODEL="runs/historia_smoke/lora_adapter"
+METHOD=${1:-"WGA"}
+BASE_MODEL="Qwen2.5-1.5B-Instruct" # CORREGIDO: Usamos Qwen
+PREV_MODEL="./saves/train/historia_M0" # CORREGIDO: Tu adaptador real de la Fase 1
 
 echo "========================================================="
 echo "Iniciando Pipeline de Desaprendizaje Secuencial Iterativo"
@@ -15,33 +12,25 @@ echo "Modelo Base: $BASE_MODEL"
 echo "Adaptador Inicial (M_0): $PREV_MODEL"
 echo "========================================================="
 
-# Asegurar que los splits secuenciales existan (L_n y D_prev)
-if [ ! -d "data/historia/processed/sequential" ]; then
-    echo "Generando splits secuenciales (Fase 2)..."
-    python phase2_scripts/05_create_sequential_splits.py
-fi
-
 for i in {1..5}; do
     echo ""
     echo "========================================================="
     echo "Iteración $i / 5: Entrenamiento de M_$i = U(M_$(($i-1)), L_$i)"
-    echo "Adaptador Previo (M_$(($i-1))): $PREV_MODEL"
     echo "========================================================="
     
-    CURRENT_RUN_DIR="runs/sequential_${METHOD}_batch_${i}"
+    CURRENT_RUN_DIR="sequential_${METHOD}_batch_${i}"
     
-    # 1. Entrenamiento usando forget_batch_i
-    # Se usa el modelo base y se le inyecta el adaptador de la iteración anterior
+    # 1. Entrenamiento: CORREGIDAS LAS LLAVES DE HYDRA
+    # 1. Entrenamiento: CORREGIDAS LAS LLAVES DE HYDRA Y AÑADIDA LA PROTECCIÓN DE COLUMNAS
     python src/train.py \
         experiment=unlearn/sequential \
-        model=Llama-3.2-1B-Instruct \
+        model=${BASE_MODEL} \
         trainer=${METHOD} \
-        dataset.forget_split="forget_batch_${i}" \
         model.adapter_path=${PREV_MODEL} \
-        paths.output_dir=${CURRENT_RUN_DIR}
-        
-    # El nuevo adaptador M_n guardado (SIN hacer merge)
-    NEW_MODEL="${CURRENT_RUN_DIR}/lora_adapter"
+        task_name=${CURRENT_RUN_DIR} \
+        forget_split="forget_batch_${i}"
+    # El nuevo adaptador M_n guardado
+    NEW_MODEL="./saves/unlearn/${CURRENT_RUN_DIR}"
     
     echo "========================================================="
     echo "Iteración $i / 5: Evaluación Continua (Fase 3) - L_$i"

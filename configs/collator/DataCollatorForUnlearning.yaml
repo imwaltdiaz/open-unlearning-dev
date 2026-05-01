@@ -1,0 +1,4 @@
+DataCollatorForUnlearning:
+  handler: DataCollatorForUnlearning
+  args:
+    padding_side: right

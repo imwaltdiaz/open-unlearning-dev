@@ -41,6 +41,16 @@ class GradDiff(UnlearnTrainer):
     def compute_loss(
         self, model, inputs, return_outputs=False, num_items_in_batch=None
     ):
+        # DEBUG: Verify nested structure is preserved
+        if not isinstance(inputs, dict) or "forget" not in inputs or "retain" not in inputs:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ CRITICAL: inputs dict structure corrupted!")
+            logger.error(f"   Expected: {{'forget': {{...}}, 'retain': {{...}}}}")
+            logger.error(f"   Received: keys={inputs.keys() if isinstance(inputs, dict) else type(inputs)}")
+            logger.error(f"   This means DataCollator or _prepare_inputs is flattening the structure.")
+            raise KeyError(f"'forget' key missing from inputs. Structure={list(inputs.keys()) if isinstance(inputs, dict) else 'NOT A DICT'}")
+        
         forget_inputs = inputs["forget"]
         forget_inputs = {
             "input_ids": forget_inputs["input_ids"],

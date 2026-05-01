@@ -33,6 +33,35 @@ def main(cfg: DictConfig):
         data_cfg, mode=mode, tokenizer=tokenizer, template_args=template_args
     )
 
+    # --- INYECCIÓN MANUAL DEL DATASET DE DESAPRENDIZAJE ---
+    # Si estamos desaprendiendo y el dataset se aplanó, lo forzamos a la estructura WGA
+    if mode == "unlearn" and "train" in data:
+        train_data = data["train"]
+        if not hasattr(train_data, 'forget'):
+            print("\n[HACK] Forzando estructura ForgetRetainDataset...")
+            try:
+                from data import get_datasets
+                from data.unlearn import ForgetRetainDataset
+                
+                forget_ds = get_datasets(data_cfg.forget, tokenizer=tokenizer, template_args=template_args)
+                retain_ds = get_datasets(data_cfg.retain, tokenizer=tokenizer, template_args=template_args)
+                
+                # Si retorna diccionario (múltiples splits), sacamos el dataset real
+                if isinstance(forget_ds, dict):
+                    forget_ds = list(forget_ds.values())[0]
+                if isinstance(retain_ds, dict):
+                    retain_ds = list(retain_ds.values())[0]
+                    
+                data["train"] = ForgetRetainDataset(
+                    forget=forget_ds,
+                    retain=retain_ds,
+                    anchor=data_cfg.get("anchor", "forget")
+                )
+                print("[HACK] Estructura reconstruida exitosamente.")
+            except Exception as e:
+                print(f"[HACK ERROR] No se pudo reconstruir el dataset: {e}")
+    # --------------------------------------------------------
+
     # Load collator
     collator_cfg = cfg.collator
     collator = get_collators(collator_cfg, tokenizer=tokenizer)
@@ -51,6 +80,14 @@ def main(cfg: DictConfig):
             model=model,
             tokenizer=tokenizer,
         )
+
+    # --- HACK DE EMERGENCIA (Doble candado contra HuggingFace) ---
+    from omegaconf import OmegaConf
+    OmegaConf.set_struct(trainer_cfg, False)
+    if "args" not in trainer_cfg:
+        trainer_cfg.args = {}
+    trainer_cfg.args.remove_unused_columns = False
+    # -------------------------------------------------------------
 
     trainer, trainer_args = load_trainer(
         trainer_cfg=trainer_cfg,

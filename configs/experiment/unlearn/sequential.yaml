@@ -1,58 +1,30 @@
 # @package _global_
 
 defaults:
-  - override /model: Llama-3.2-1B-Instruct
+  - override /model: Qwen2.5-1.5B-Instruct
   - override /trainer: WGA
+  - override /collator: DataCollatorForUnlearning
+  - override /eval: tofu
   - override /data: unlearn
-  - override /collator: DataCollatorForSupervisedDataset
-  - override /eval: sequential_eval
   - _self_
 
+mode: unlearn
+task_name: WGA_batch_1
 forget_split: forget_batch_1
 retain_path: data/historia/processed/retain.jsonl
 
 model:
-  adapter_path: null
-
-data:
-  anchor: forget
-  forget:
-    HISTORIA_forget:
-      handler: QADataset
-      args:
-        hf_args:
-          path: json
-          data_files: data/historia/sequential_splits/${forget_split}.jsonl
-          split: train
-        question_key: question
-        answer_key: answer
-        max_length: 512
-  retain:
-    HISTORIA_retain:
-      handler: QADataset
-      args:
-        hf_args:
-          path: json
-          data_files: ${retain_path}
-          split: train
-        question_key: question
-        answer_key: answer
-        max_length: 512
-
-eval:
-  sequential_forget:
-    dataset_path: data/historia/sequential_splits/${forget_split}.jsonl
-    metrics: [forget_Truth_Ratio, forget_Q_A_ROUGE, forget_Q_A_gibberish]
-  sequential_retain:
-    dataset_path: ${retain_path}
-    metrics: [retain_Truth_Ratio, retain_Q_A_ROUGE]
+  adapter_path: ./saves/train/historia_M0
 
 trainer:
+  method_args:
+    beta: 1.0
+    gamma: 1.0
+    alpha: 1.0
   args:
     per_device_train_batch_size: 4
     gradient_accumulation_steps: 8
     learning_rate: 1e-5
     num_train_epochs: 3
     lr_scheduler_type: constant
-
-task_name: ???
+    remove_unused_columns: False

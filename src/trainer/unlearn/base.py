@@ -36,6 +36,40 @@ if is_deepspeed_available():
 
 
 class UnlearnTrainer(FinetuneTrainer):
+    # CRITICAL FIX: Override label_names to preserve nested dict structure
+    # HuggingFace Trainer uses label_names to determine which keys are "model-level"
+    # Without this, it tries to extract labels from the batch root level
+    @property
+    def label_names(self):
+        return []
+
+    @label_names.setter
+    def label_names(self, value):
+        pass  # Ignoramos lo que HuggingFace intenta inyectar
+
+    def _remove_unused_columns(self, dataset, description: str = None):
+        """
+        OVERRIDE ABSOLUTO: 
+        Forzamos a HuggingFace a que JAMÁS elimine las columnas 'forget' y 'retain'.
+        Ignoramos por completo la limpieza por defecto.
+        """
+        return dataset
+    
+    def _prepare_inputs(self, inputs: dict):
+        """
+        Override _prepare_inputs to preserve nested dict structure for unlearning datasets.
+        
+        Default HF Trainer behavior: moves tensors to device, potentially flattening structure.
+        Our override: recursively preserves nested dicts {"forget": {...}, "retain": {...}}
+        """
+        if isinstance(inputs, dict):
+            return {k: self._prepare_inputs(v) for k, v in inputs.items()}
+        elif isinstance(inputs, (tuple, list)):
+            return tuple(self._prepare_inputs(item) for item in inputs)
+        else:
+            # Move tensor to device
+            return inputs.to(self.args.device) if hasattr(inputs, 'to') else inputs
+    
     # Adapted from Huggingface DPO Trainer: https://github.com/huggingface/accelerate/blob/739b135f8367becb67ffaada12fe76e3aa60fefd/src/accelerate/accelerator.py#L1473
     def _prepare_deepspeed(self, model):
         # Adapted from accelerate: https://github.com/huggingface/accelerate/blob/739b135f8367becb67ffaada12fe76e3aa60fefd/src/accelerate/accelerator.py#L1473
